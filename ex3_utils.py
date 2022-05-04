@@ -45,8 +45,8 @@ def opticalFlow(im1: np.ndarray, im2: np.ndarray, step_size=10,
     u_v = []
     x_y = []
     # maybe look to start loop from winsize/2 and not step size
-    for i in range(win_size // 2, im1.shape[0], step_size):
-        for j in range(win_size // 2, im1.shape[1], step_size):
+    for i in range(step_size, im1.shape[0], step_size):
+        for j in range(step_size, im1.shape[1], step_size):
             # create the small sample out of ix,iy,it and work on it
             sample_I_X = I_X[i - win_size // 2:i + win_size // 2 + 1, j - win_size // 2: j + win_size // 2 + 1]
             sample_I_Y = I_Y[i - win_size // 2:i + win_size // 2 + 1, j - win_size // 2: j + win_size // 2 + 1]
@@ -59,13 +59,14 @@ def opticalFlow(im1: np.ndarray, im2: np.ndarray, step_size=10,
 
             # size of samples
             n = len(sample_I_X)
+
             # I will now calculate the (A^tA)^-1 and A^tB matrices
             sum_IX_squared = sum(sample_I_X[h] ** 2 for h in range(n))
             sum_IX_IY = sum(sample_I_X[h] * sample_I_Y[h] for h in range(n))
             sum_IY_squared = sum(sample_I_Y[h] ** 2 for h in range(n))
 
-            sum_IX_IT = -sum(sample_I_X[h] * sample_I_T[h] for h in range(n))
-            sum_IY_IT = -sum(sample_I_Y[h] * sample_I_T[h] for h in range(n))
+            sum_IX_IT = sum(sample_I_X[h] * sample_I_T[h] for h in range(n))
+            sum_IY_IT = sum(sample_I_Y[h] * sample_I_T[h] for h in range(n))
 
             # Enter what we calculated into a 2x2 matrix
             A = np.array([[sum_IX_squared, sum_IX_IY], [sum_IX_IY, sum_IY_squared]])
@@ -90,10 +91,10 @@ def opticalFlow(im1: np.ndarray, im2: np.ndarray, step_size=10,
 
             # condition 2 if it holds add the point
             if eig_val2 > 1 and eig_val1 / eig_val2 < 100:
-                x_y.append(np.array([i, j]))
-                u_v.append(np.array([u, v]))
+                x_y.append([j, i])
+                u_v.append([u, v])
 
-    return x_y, u_v
+    return np.array(x_y), np.array(u_v)
 
 
 def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int,
@@ -107,7 +108,22 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int,
     :return: A 3d array, with a shape of (m, n, 2),
     where the first channel holds U, and the second V.
     """
-    pass
+    u_v_return = []
+
+    img1_pyr = gaussianPyr(img1, k)
+    img2_pyr = gaussianPyr(img2, k)
+    # entering the last pyramid
+    x_y, u_v_prev = opticalFlow(img1_pyr[-1], img2_pyr[-1], stepSize, winSize)
+    for i in range(1, k):
+        # find optical flow for this level
+        uv_i = opticalFlow(img1_pyr[-1 - i], img2_pyr[-1 - i], stepSize, winSize)
+        # update uv according to formula
+        uv_i += 2 * u_v_prev
+        u_v_prev = uv_i
+        if i == k - 1:
+            u_v_return.append(uv_i)
+    print(type(u_v_return))
+    return np.ndarray(u_v_return[0][0], u_v_return[1][0], 2)
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +191,15 @@ def gaussianPyr(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     :param levels: Pyramid depth
     :return: Gaussian pyramid (list of images)
     """
-    pass
+
+    pyr = [img]
+    ker_size = 5
+    for i in range(1, levels):
+        kernal = cv2.getGaussianKernel(ker_size, 0.3 * ((ker_size - 1) * 0.5 - 1) + 0.8)
+        img = cv2.filter2D(img, -1, kernel=kernal, borderType=cv2.BORDER_REPLICATE)
+        img = img[::2, ::2]
+        pyr.append(img)
+    return pyr
 
 
 def laplaceianReduce(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
