@@ -175,8 +175,23 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Rigid.
     :return: Rigid matrix by LK.
     """
-    pass
+    xy, uv = opticalFlow(im1, im2, 20, 5)
+    xy_after_change = xy.copy()
+    angle_list = []
+    xy_after_change = xy_after_change.astype(float)
+    for i in range(len(xy)):
+        xy_after_change[i] += uv[i]
+        angle_list.append(find_ang(xy[i], xy_after_change[i]))
+    angle_list = np.array(angle_list)
+    theta = np.median(angle_list)
+    mat_to_extract_xy_from = findTranslationLK(im1,im2)
+    t_x = mat_to_extract_xy_from[0][2]
+    t_y = mat_to_extract_xy_from[1][2]
+    translation_mat = np.float32([[np.cos(np.radians(theta)), -np.sin(np.radians(theta)), t_x],
+                                  [np.sin(np.radians(theta)), np.cos(np.radians(theta)), t_y],
+                                  [0, 0, 1]])
 
+    return translation_mat
 
 def findTranslationCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     """
@@ -303,28 +318,13 @@ def gaussianPyr(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     pyr = [img]
     ker_size = 5
     for i in range(1, levels):
-        kernal = cv2.getGaussianKernel(ker_size, 0.3 * ((ker_size - 1) * 0.5 - 1) + 0.8)
-        img = cv2.filter2D(img, -1, kernel=kernal, borderType=cv2.BORDER_REPLICATE)
+        kernel = cv2.getGaussianKernel(ker_size, 0.3 * ((ker_size - 1) * 0.5 - 1) + 0.8)
+        img = cv2.filter2D(img, -1, kernel=kernel, borderType=cv2.BORDER_REPLICATE)
+        img = cv2.filter2D(img, -1, kernel=np.transpose(kernel), borderType=cv2.BORDER_REPLICATE)
         img = img[::2, ::2]
         pyr.append(img)
     return pyr
-def gaussian_Kernel(kernel_size: int):
-    sigma = int(round(0.3 * ((kernel_size - 1) * 0.5 - 1) + 0.8))
-    g_kernel = cv2.getGaussianKernel(kernel_size, sigma)
-    g_kernel = g_kernel * g_kernel.transpose()
-    return g_kernel
 
-def gaussExpand(img: np.ndarray, gs_k: np.ndarray) -> np.ndarray:
-    """
-    Expands a Gaussian pyramid level one step up
-    :param img: Pyramid image at a certain level
-    :param gs_k: The kernel to use in expanding
-    :return: The expanded level
-    """
-    expand = np.zeros((img.shape[0] * 2, img.shape[1] * 2))
-    expand[::2, ::2] = img
-    expand = cv2.filter2D(expand, -1, gs_k, borderType=cv2.BORDER_REPLICATE)
-    return expand
 
 def laplaceianReduce(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     """
@@ -334,15 +334,22 @@ def laplaceianReduce(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     :return: Laplacian Pyramid (list of images)
     """
     pyr = []
-    g_ker = gaussian_Kernel(5)
-    g_ker *= 4
+    ker_size = 5
+    # similar to gaussian kernel however we will round the sigma to int inorder to receive a more
+    # vivid picture
+    kernel = cv2.getGaussianKernel(ker_size, int(0.3 * ((ker_size - 1) * 0.5 - 1) + 0.8))
+    kernel = (kernel * kernel.transpose()) * 4
     gaussian_pyr = gaussianPyr(img, levels)
     for i in range(levels - 1):
-        extend_level = gaussExpand(gaussian_pyr[i + 1], g_ker)
-        lap_level = gaussian_pyr[i] - extend_level
-        pyr.append(lap_level.copy())
+        pyr_img = gaussian_pyr[i + 1]
+        extended_pic = np.zeros((pyr_img.shape[0] * 2, pyr_img.shape[1] * 2))
+        extended_pic[::2, ::2] = pyr_img
+        extend_level = cv2.filter2D(extended_pic, -1, kernel, borderType=cv2.BORDER_REPLICATE)
+        curr_level = gaussian_pyr[i] - extend_level
+        pyr.append(curr_level)
     pyr.append(gaussian_pyr[-1])
     return pyr
+
 
 def laplaceianExpand(lap_pyr: List[np.ndarray]) -> np.ndarray:
     """
@@ -350,7 +357,16 @@ def laplaceianExpand(lap_pyr: List[np.ndarray]) -> np.ndarray:
     :param lap_pyr: Laplacian Pyramid
     :return: Original image
     """
-    pass
+    ker_size = 5
+    lap_pyr_copy = lap_pyr.copy()
+    kernel = cv2.getGaussianKernel(ker_size, int(0.3 * ((ker_size - 1) * 0.5 - 1) + 0.8))
+    kernel = (kernel * kernel.transpose()) * 4
+    cur_layer = lap_pyr[-1]
+    for i in range(len(lap_pyr_copy) - 2, -1, -1):
+        extended_pic = np.zeros((cur_layer.shape[0] * 2, cur_layer.shape[1] * 2))
+        extended_pic[::2, ::2] = cur_layer
+        cur_layer = cv2.filter2D(extended_pic, -1, kernel, borderType=cv2.BORDER_REPLICATE) + lap_pyr_copy[i]
+    return cur_layer
 
 
 def pyrBlend(img_1: np.ndarray, img_2: np.ndarray,
