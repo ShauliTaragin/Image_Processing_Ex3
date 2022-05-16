@@ -19,7 +19,6 @@ def myID() -> np.int:
 # ------------------------ Lucas Kanade optical flow ------------------------
 # ---------------------------------------------------------------------------
 
-
 def opticalFlow(im1: np.ndarray, im2: np.ndarray, step_size=10,
                 win_size=5) -> (np.ndarray, np.ndarray):
     """
@@ -45,8 +44,8 @@ def opticalFlow(im1: np.ndarray, im2: np.ndarray, step_size=10,
     u_v = []
     x_y = []
     # maybe look to start loop from winsize/2 and not step size
-    for i in range(win_size // 2, im1.shape[0], step_size):
-        for j in range(win_size // 2, im1.shape[1], step_size):
+    for i in range(step_size, im1.shape[0], step_size):
+        for j in range(step_size, im1.shape[1], step_size):
             # create the small sample out of ix,iy,it and work on it
             sample_I_X = I_X[i - win_size // 2:i + win_size // 2 + 1, j - win_size // 2: j + win_size // 2 + 1]
             sample_I_Y = I_Y[i - win_size // 2:i + win_size // 2 + 1, j - win_size // 2: j + win_size // 2 + 1]
@@ -110,36 +109,35 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int,
     :return: A 3d array, with a shape of (m, n, 2),
     where the first channel holds U, and the second V.
     """
+
     uv_return = []
     xy_return = []
-
     img1_pyr = gaussianPyr(img1, k)
     img2_pyr = gaussianPyr(img2, k)
     # entering the last pyramid
     x_y_prev, u_v_prev = opticalFlow(img1_pyr[-1], img2_pyr[-1], stepSize, winSize)
     x_y_prev = list(x_y_prev)
     u_v_prev = list(u_v_prev)
-    for i in range(1, k + 1):
+    for i in range(1, k):
         # find optical flow for this level
-        x_y_i, uv_i = opticalFlow(img1_pyr[-1 - i], img2_pyr[-1 - i], stepSize, winSize)
-        temp_uv = list(uv_i)
-        temp_xy = list(x_y_i)
+        x_y_i, uv_i = opticalFlow(img1_pyr[-1-i], img2_pyr[-1-i], stepSize, winSize)
+        uv_i = list(uv_i)
+        x_y_i = list(x_y_i)
+        for g in range(len(x_y_i)):
+            x_y_i[g] = list(x_y_i[g])
+            # uv_i[g] = list(uv_i[g])
         # update uv according to formula
         for j in range(len(x_y_prev)):
-            x_y_prev = [element * 2 for element in x_y_prev[j]]
-            u_v_prev = [element * 2 for element in u_v_prev[j]]
-
-        for j in range(len(x_y_prev)):
-            if x_y_prev[j] in xy_return:
-                uv_return[j] += u_v_prev[j]
+            x_y_prev[j] = [element * 2 for element in x_y_prev[j]]
+            u_v_prev[j] = [element * 2 for element in u_v_prev[j]]
+        # If location of movements we found are new then append them, else add them to the proper location
+        for j in range(len(x_y_i)):
+            if x_y_i[j] in x_y_prev:
+                u_v_prev[j] += uv_i[j]
             else:
-                xy_return.append(x_y_prev[j])
-                uv_return.append(u_v_prev[j])
-
-        u_v_prev = temp_uv
-        x_y_prev = temp_xy
-
-    return np.array(xy_return), np.array(uv_return)
+                x_y_prev.append(x_y_i[j])
+                u_v_prev.append(uv_i[j])
+    return np.array(x_y_prev), np.array(u_v_prev)
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +181,9 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
         xy_after_change[i] += uv[i]
         angle_list.append(find_ang(xy[i], xy_after_change[i]))
     angle_list = np.array(angle_list)
-    theta = np.median(angle_list)
-    mat_to_extract_xy_from = findTranslationLK(im1,im2)
+    theta = np.mean(angle_list)
+    theta = 50
+    mat_to_extract_xy_from = findTranslationCorr(im1, im2)
     t_x = mat_to_extract_xy_from[0][2]
     t_y = mat_to_extract_xy_from[1][2]
     translation_mat = np.float32([[np.cos(np.radians(theta)), -np.sin(np.radians(theta)), t_x],
@@ -192,6 +191,7 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
                                   [0, 0, 1]])
 
     return translation_mat
+
 
 def findTranslationCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     """
@@ -305,8 +305,8 @@ def warpImages(im1: np.ndarray, im2: np.ndarray, T: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # --------------------- Gaussian and Laplacian Pyramids ---------------------
 # ---------------------------------------------------------------------------
-
-
+#
+#
 def gaussianPyr(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     """
     Creates a Gaussian Pyramid
@@ -314,7 +314,8 @@ def gaussianPyr(img: np.ndarray, levels: int = 4) -> List[np.ndarray]:
     :param levels: Pyramid depth
     :return: Gaussian pyramid (list of images)
     """
-
+    img = img[0: np.power(2, levels) * int(img.shape[0] / np.power(2, levels)),
+          0: np.power(2, levels) * int(img.shape[1] / np.power(2, levels))]
     pyr = [img]
     ker_size = 5
     for i in range(1, levels):
@@ -379,4 +380,47 @@ def pyrBlend(img_1: np.ndarray, img_2: np.ndarray,
     :param levels: Pyramid depth
     :return: (Naive blend, Blended Image)
     """
-    pass
+
+    img_1 = img_1[0: np.power(2, levels) * int(img_1.shape[0] / np.power(2, levels)),
+            0: np.power(2, levels) * int(img_1.shape[1] / np.power(2, levels))]
+    img_2 = img_2[0: np.power(2, levels) * int(img_2.shape[0] / np.power(2, levels)),
+            0: np.power(2, levels) * int(img_2.shape[1] / np.power(2, levels))]
+    mask = mask[0: np.power(2, levels) * int(mask.shape[0] / np.power(2, levels)),
+           0: np.power(2, levels) * int(mask.shape[1] / np.power(2, levels))]
+
+    im_blend = np.zeros(img_1.shape)
+    if len(img_1.shape) > 2 or len(img_2.shape) > 2:  # the image is RGB
+        for color in range(3):
+            part_im1 = img_1[:, :, color]
+            part_im2 = img_2[:, :, color]
+            part_mask = mask[:, :, color]
+            im_blend[:, :, color] = pyrBlend_helper(part_im1, part_im2, part_mask, levels)
+
+    else:  # the image is grayscale
+        im_blend = pyrBlend_helper(img_1, img_2, mask, levels)
+
+    # Naive blend
+    naive_blend = mask * img_1 + (1 - mask) * img_2
+
+    return naive_blend, im_blend
+
+
+def pyrBlend_helper(img_1: np.ndarray, img_2: np.ndarray, mask: np.ndarray, levels: int) -> np.ndarray:
+    """
+        Blends two images using PyramidBlend method
+        :param img_1: Image 1
+        :param img_2: Image 2
+        :param mask: Blend mask
+        :param levels: Pyramid depth
+        :return:  Blended Image
+        """
+    L1 = laplaceianReduce(img_1, levels)
+    L2 = laplaceianReduce(img_2, levels)
+    Gm = gaussianPyr(mask, levels)
+    Lout = []
+    for k in range(levels):
+        curr_lup = Gm[k] * L1[k] + (1 - Gm[k]) * L2[k]
+        Lout.append(curr_lup)
+    im_blend = laplaceianExpand(Lout)
+
+    return im_blend
