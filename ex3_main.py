@@ -328,7 +328,7 @@ def main():
     RigidCorrelation(img_path)
     # Warping
     img_path = 'input/boxMan.jpg'
-    # imageWarpingDemo(img_path)
+    imageWarpingDemo(img_path)
     # Pyramids
     pyrGaussianDemo('input/pyr_bit.jpg')
     pyrLaplacianDemo('input/pyr_bit.jpg')

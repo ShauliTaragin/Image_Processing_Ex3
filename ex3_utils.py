@@ -163,7 +163,7 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     translation_mat = np.float32([[1, 0, u_average*50],
                                   [0, 1, v_average*3],
                                   [0, 0, 1]])
-
+    #need to fix this
     return translation_mat
 
 
