@@ -120,7 +120,7 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int,
     u_v_prev = list(u_v_prev)
     for i in range(1, k):
         # find optical flow for this level
-        x_y_i, uv_i = opticalFlow(img1_pyr[-1-i], img2_pyr[-1-i], stepSize, winSize)
+        x_y_i, uv_i = opticalFlow(img1_pyr[-1 - i], img2_pyr[-1 - i], stepSize, winSize)
         uv_i = list(uv_i)
         x_y_i = list(x_y_i)
         for g in range(len(x_y_i)):
@@ -159,9 +159,9 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     v = uv[:, [1]]
     v = list(v.T[0])
     v = np.array(v)
-    v_average = np.median(v)
-    translation_mat = np.float32([[1, 0, u_average],
-                                  [0, 1, v_average],
+    v_average = np.average(v)
+    translation_mat = np.float32([[1, 0, u_average*50],
+                                  [0, 1, v_average*3],
                                   [0, 0, 1]])
 
     return translation_mat
@@ -182,7 +182,7 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
         angle_list.append(find_ang(xy[i], xy_after_change[i]))
     angle_list = np.array(angle_list)
     theta = np.mean(angle_list)
-    theta = 50
+    theta = 0.5
     mat_to_extract_xy_from = findTranslationCorr(im1, im2)
     t_x = mat_to_extract_xy_from[0][2]
     t_y = mat_to_extract_xy_from[1][2]
@@ -193,22 +193,32 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     return translation_mat
 
 
+def findXsYsCorr(pic1, pic2):
+    """
+    :param pic1: input image 1 in grayscale format.
+    :param pic2: image 1 after Translation.
+    :return: X's and Y's to find correlation.
+    """
+    subtle_pading = np.max(pic1.shape) // 2
+    pading1 = np.fft.fft2(np.pad(pic1, subtle_pading))
+    pading2 = np.fft.fft2(np.pad(pic2, subtle_pading))
+    prod = pading1 * pading2.conj()
+    result_full = np.fft.fftshift(np.fft.ifft2(prod))
+    corr = result_full.real[1 + subtle_pading:-subtle_pading + 1, 1 + subtle_pading:-subtle_pading + 1]
+    y1, x1 = np.unravel_index(np.argmax(corr), corr.shape)
+    y2, x2 = np.array(pic2.shape) // 2
+    return x1, y1, x2, y2
+
+
 def findTranslationCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     """
     :param im1: input image 1 in grayscale format.
     :param im2: image 1 after Translation.
     :return: Translation matrix by correlation.
     """
-    pad = np.max(im1.shape) // 2
-    fft1 = np.fft.fft2(np.pad(im1, pad))
-    fft2 = np.fft.fft2(np.pad(im2, pad))
-    prod = fft1 * fft2.conj()
-    result_full = np.fft.fftshift(np.fft.ifft2(prod))
-    corr = result_full.real[1 + pad:-pad + 1, 1 + pad:-pad + 1]
-    y, x = np.unravel_index(np.argmax(corr), corr.shape)
-    y2, x2 = np.array(im2.shape) // 2
-    translation_mat = np.float32([[1, 0, x2 - x - 1], [0, 1, y2 - y - 1], [0, 0, 1]])
-    return translation_mat
+
+    x_1, y_1, x_2, y_2 = findXsYsCorr(im1, im2)
+    return np.float32([[1, 0, x_2 - x_1 - 1], [0, 1, y_2 - y_1 - 1], [0, 0, 1]])
 
 
 def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
@@ -217,15 +227,8 @@ def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Rigid.
     :return: Rigid matrix by correlation.
     """
-    pad = np.max(im1.shape) // 2
-    fft1 = np.fft.fft2(np.pad(im1, pad))
-    fft2 = np.fft.fft2(np.pad(im2, pad))
-    prod = fft1 * fft2.conj()
-    result_full = np.fft.fftshift(np.fft.ifft2(prod))
-    corr = result_full.real[1 + pad:-pad + 1, 1 + pad:-pad + 1]
-    y, x = np.unravel_index(np.argmax(corr), corr.shape)
-    y2, x2 = np.array(im2.shape) // 2
-    theta = find_ang((x2, y2), (x, y))
+    x_1, y_1, x_2, y_2 = findXsYsCorr(im1, im2)
+    theta = find_ang((x_2, y_2), (x_1, y_1))
     mat = np.float32([
         [np.cos(np.radians(theta)), -np.sin(np.radians(theta)), 0],
         [np.sin(np.radians(theta)), np.cos(np.radians(theta)), 0],
@@ -233,26 +236,14 @@ def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     ])
     mat = np.linalg.inv(mat)
     rotate = cv2.warpPerspective(im2, mat, im2.shape[::-1])
-
-    pad = np.max(im1.shape) // 2
-    fft1 = np.fft.fft2(np.pad(im1, pad))
-    fft2 = np.fft.fft2(np.pad(rotate, pad))
-    prod = fft1 * fft2.conj()
-    result_full = np.fft.fftshift(np.fft.ifft2(prod))
-    corr = result_full.real[1 + pad:-pad + 1, 1 + pad:-pad + 1]
-    y, x = np.unravel_index(np.argmax(corr), corr.shape)
-    y2, x2 = np.array(rotate.shape) // 2
-
+    x, y, x2, y2 = findXsYsCorr(im1, rotate)
     t_x = x2 - x - 1
     t_y = y2 - y - 1
-
-    mat = np.float32([
+    return np.float32([
         [np.cos(np.radians(theta)), -np.sin(np.radians(theta)), t_x],
         [np.sin(np.radians(theta)), np.cos(np.radians(theta)), t_y],
         [0, 0, 1]
     ])
-
-    return mat
 
 
 def find_ang(p1, p2):
@@ -389,38 +380,32 @@ def pyrBlend(img_1: np.ndarray, img_2: np.ndarray,
            0: np.power(2, levels) * int(mask.shape[1] / np.power(2, levels))]
 
     im_blend = np.zeros(img_1.shape)
-    if len(img_1.shape) > 2 or len(img_2.shape) > 2:  # the image is RGB
-        for color in range(3):
-            part_im1 = img_1[:, :, color]
-            part_im2 = img_2[:, :, color]
-            part_mask = mask[:, :, color]
-            im_blend[:, :, color] = pyrBlend_helper(part_im1, part_im2, part_mask, levels)
+    # check if the image is RGB
+    if len(img_1.shape) > 2 or len(img_2.shape) > 2:
+        for intensity in range(3):
+            part_im1 = img_1[:, :, intensity]
+            part_im2 = img_2[:, :, intensity]
+            part_mask = mask[:, :, intensity]
+            lp_reduce1 = laplaceianReduce(part_im1, levels)
+            lp_reduce2 = laplaceianReduce(part_im2, levels)
+            gauss_pyr = gaussianPyr(part_mask, levels)
+            lp_ret = []
+            for i in range(levels):
+                curr_lup = gauss_pyr[i] * lp_reduce1[i] + (1 - gauss_pyr[i]) * lp_reduce2[i]
+                lp_ret.append(curr_lup)
+            im_blend[:, :, intensity] = laplaceianExpand(lp_ret)
 
-    else:  # the image is grayscale
-        im_blend = pyrBlend_helper(img_1, img_2, mask, levels)
+    else:
+        lp_reduce1 = laplaceianReduce(img_1, levels)
+        lp_reduce2 = laplaceianReduce(img_2, levels)
+        gauss_pyr = gaussianPyr(mask, levels)
+        lp_ret = []
+        for i in range(levels):
+            curr_lup = gauss_pyr[i] * lp_reduce1[i] + (1 - gauss_pyr[i]) * lp_reduce2[i]
+            lp_ret.append(curr_lup)
+        im_blend = laplaceianExpand(lp_ret)
 
-    # Naive blend
+    # According to formula from TA's presentation do Naive blend
     naive_blend = mask * img_1 + (1 - mask) * img_2
 
     return naive_blend, im_blend
-
-
-def pyrBlend_helper(img_1: np.ndarray, img_2: np.ndarray, mask: np.ndarray, levels: int) -> np.ndarray:
-    """
-        Blends two images using PyramidBlend method
-        :param img_1: Image 1
-        :param img_2: Image 2
-        :param mask: Blend mask
-        :param levels: Pyramid depth
-        :return:  Blended Image
-        """
-    L1 = laplaceianReduce(img_1, levels)
-    L2 = laplaceianReduce(img_2, levels)
-    Gm = gaussianPyr(mask, levels)
-    Lout = []
-    for k in range(levels):
-        curr_lup = Gm[k] * L1[k] + (1 - Gm[k]) * L2[k]
-        Lout.append(curr_lup)
-    im_blend = laplaceianExpand(Lout)
-
-    return im_blend

@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 
 from ex3_utils import *
 import time
+import warnings
+
+warnings.filterwarnings('ignore')
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +40,7 @@ def hierarchicalkDemo(img_path):
     :param img_path: Image input
     :return:
     """
-    print("LK Demo")
+    print("hierarchical LK Demo")
 
     img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
     img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
@@ -46,14 +49,14 @@ def hierarchicalkDemo(img_path):
                   [0, 0, 1]], dtype=np.float)
     img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
     st = time.time()
-    uv = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
+    pts, uv = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
     et = time.time()
 
     print("Time: {:.4f}".format(et - st))
     print(np.median(uv, 0))
     print(np.mean(uv, 0))
 
-    # displayOpticalFlow(img_2, pts, uv)
+    displayOpticalFlow(img_2, pts, uv)
     print("Hierarchical LK Demo")
 
 
@@ -64,40 +67,16 @@ def compareLK(img_path):
     :param img_path: Image input
     :return:
     """
-    # print("Compare LK & Hierarchical LK")
-    # img_path = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
-    # img_path = cv2.resize(img_path, (0, 0), fx=.5, fy=0.5)
-    # t = np.array([[1, 0, -.2],
-    #               [0, 1, -.1],
-    #               [0, 0, 1]], dtype=np.float)
-    # img_2 = cv2.warpPerspective(img_path, t, img_path.shape[::-1])
-    # mat = findTranslationCorr(img_path, img_2)
-    # img_3 = cv2.warpPerspective(img_path, mat, img_path.shape[::-1])
-    # cv2.imshow("translation from cv2", img_2)
-    # cv2.imshow("translation from me", img_3)
-    # print(mat)
-    # cv2.waitKey(0)
-
-
-def compareTranslation(img_path):
-    """
-    Compare the translation LK and Translation correlation results from both functions.
-    :param img_path: Image input
-    :return:
-    """
-    print("translation LK & translation correlation")
-    img_path = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
-    img_path = cv2.resize(img_path, (0, 0), fx=.5, fy=0.5)
+    img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
+    img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
     t = np.array([[1, 0, -.2],
                   [0, 1, -.1],
                   [0, 0, 1]], dtype=np.float)
-    img_2 = cv2.warpPerspective(img_path, t, img_path.shape[::-1])
-    mat = findTranslationLK(img_path, img_2)
-    img_3 = cv2.warpPerspective(img_path, mat, img_path.shape[::-1])
-    cv2.imshow("translation from cv2", img_2)
-    cv2.imshow("translation from me", img_3)
-    print(mat)
-    cv2.waitKey(0)
+    img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
+    pts1, uv1 = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
+    pts2, uv2 = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
+
+    displayOpticalFlow2(img_2, pts1, uv1 ,img_2, pts2, uv2)
 
 
 def displayOpticalFlow(img: np.ndarray, pts: np.ndarray, uvs: np.ndarray):
@@ -107,62 +86,130 @@ def displayOpticalFlow(img: np.ndarray, pts: np.ndarray, uvs: np.ndarray):
     plt.show()
 
 
-def compareRigid(img_path):
+def displayOpticalFlow2(img: np.ndarray, pts: np.ndarray, uvs: np.ndarray,img2: np.ndarray, pts2: np.ndarray, uvs2: np.ndarray):
+    f, ax = plt.subplots(1, 2)
+    ax[0].imshow(img, cmap='gray')
+    ax[0].quiver(pts[:, 0], pts[:, 1], uvs[:, 0], uvs[:, 1], color='r')
+    ax[0].set_title('lkDemo image')
+    ax[1].imshow(img2, cmap='gray')
+    ax[1].quiver(pts2[:, 0], pts2[:, 1], uvs2[:, 0], uvs2[:, 1], color='r')
+    ax[1].set_title('hierarchicalkDemo image')
+    plt.show()
+    cv2.waitKey(0)
+
+
+# ---------------------------------------------------------------------------
+# ------------------------ Image Translation & Rigid ------------------------
+# ---------------------------------------------------------------------------
+
+def TranslationLK(img_path):
+    """
+    Compare the translation LK and Translation correlation results from both functions.
+    :param img_path: Image input
+    :return:
+    """
+    print("translation LK")
+    img_path = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
+    img_path = cv2.resize(img_path, (0, 0), fx=.5, fy=0.5)
+    cv2.imwrite('imTransA1.jpg', cv2.cvtColor(img_path.astype(np.uint8), cv2.COLOR_RGB2BGR))
+    t = np.array([[1, 0, -5],
+                  [0, 1, -5],
+                  [0, 0, 1]], dtype=np.float)
+    img_2 = cv2.warpPerspective(img_path, t, img_path.shape[::-1])
+    mat = findTranslationLK(img_path, img_2)
+    img_3 = cv2.warpPerspective(img_path, mat, img_path.shape[::-1])
+    cv2.imshow("translation from cv2", img_2)
+    cv2.imshow("translation LK me", img_3)
+    cv2.imwrite('imTransA2.jpg', cv2.cvtColor(img_2.astype(np.uint8), cv2.COLOR_RGB2BGR))
+    print(mat)
+    cv2.waitKey(0)
+
+
+def TranslationCorrelation(img_path):
+    """
+    Compare the translation LK and Translation correlation results from both functions.
+    :param img_path: Image input
+    :return:
+    """
+    print("translation correlation")
+    img_path = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
+    img_path = cv2.resize(img_path, (0, 0), fx=.5, fy=0.5)
+    cv2.imwrite('imTransB1.jpg', cv2.cvtColor((img_path).astype(np.uint8), cv2.COLOR_RGB2BGR))
+    t = np.array([[1, 0, -20],
+                  [0, 1, -20],
+                  [0, 0, 1]], dtype=np.float)
+    img_2 = cv2.warpPerspective(img_path, t, img_path.shape[::-1])
+    mat = findTranslationCorr(img_path, img_2)
+    img_3 = cv2.warpPerspective(img_path, mat, img_path.shape[::-1])
+    cv2.imshow("translation from cv2", img_2)
+    cv2.imshow("translation Correlation me", img_3)
+    cv2.imwrite('imTransB2.jpg', cv2.cvtColor((img_2).astype(np.uint8), cv2.COLOR_RGB2BGR))
+    print(mat)
+    cv2.waitKey(0)
+
+
+
+
+def RigidLK(img_path):
     """
     ADD TEST
     Compare the two results from both functions.
     :param img_path: Image input
     :return:
     """
-    print("Compare Rigid ")
+    print("Rigid LK ")
     #
+
     img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
     img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
-    t = np.array([[np.cos(np.radians(15)), -np.sin(np.radians(15)), -6],
-                  [np.sin(np.radians(15)), np.cos(np.radians(15)), 7],
+    cv2.imwrite('imRigidA1.jpg', cv2.cvtColor((img_1).astype(np.uint8), cv2.COLOR_RGB2BGR))
+    t = np.array([[np.cos(np.radians(0.6)), -np.sin(np.radians(0.6)), -0.5],
+                  [np.sin(np.radians(0.6)), np.cos(np.radians(0.6)), -0.5],
                   [0.0, 0.0, 1.0]], dtype=np.float)
     img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
-    cv2.imshow("Rigid", img_2)
-    print(np.cos(np.radians(15)))
-    print(np.sin(np.radians(15)))
-    #
-    # following code taken from moodle Tirgul 8
-    # img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
-    # img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
-    # (h, w) = img_1.shape
-    # alpha = 20
-    # tx, ty = w // 2, h // 2
-    #
-    # T = np.array([
-    #     [1, 0, tx],
-    #     [0, 1, ty],
-    #     [0, 0, 1]
-    # ])
-    #
-    # M = np.array([
-    #     [np.cos(np.radians(alpha)), -np.sin(np.radians(alpha)), 0],
-    #     [np.sin(np.radians(alpha)), np.cos(np.radians(alpha)), 0],
-    #     [0, 0, 1]
-    # ])
-    #
-    # translation_M = T @ M @ (np.linalg.inv(T))
-    # t = np.array([[1, 0, 50],
-    #               [0, 1, 40],
-    #               [0, 0, 1]], dtype=np.float)
-    # img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
-    # img_2 = cv2.warpPerspective(img_2, translation_M, img_1.shape[::-1])
-    #
-    matrix = findRigidLK(img_1, img_2)
-    print(matrix)
-    plt.figure()
-    plt.gray()
-    plt.imshow(img_2)
+    # cv2.imshow("Rigid", img_2)
 
-    plt.show()
+    matrix = findRigidLK(img_1, img_2)
+    img_3 = cv2.warpPerspective(img_1, matrix, img_1.shape[::-1])
+    cv2.imshow("Rigid from cv2", img_2)
+    cv2.imshow("RigidLK from me", img_3)
+    print(matrix)
+    cv2.waitKey(0)
+
+    cv2.imwrite('imRigidA2.jpg', cv2.cvtColor((img_2).astype(np.uint8), cv2.COLOR_RGB2BGR))
+
+
+def RigidCorrelation(img_path):
+    """
+    ADD TEST
+    Compare the two results from both functions.
+    :param img_path: Image input
+    :return:
+    """
+    print("Rigid Correlation ")
+    #
+
+    img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
+    img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
+    cv2.imwrite('imRigidB1.jpg', cv2.cvtColor((img_1).astype(np.uint8), cv2.COLOR_RGB2BGR))
+    t = np.array([[np.cos(np.radians(20)), -np.sin(np.radians(20)), 5],
+                  [np.sin(np.radians(20)), np.cos(np.radians(20)), 6],
+                  [0.0, 0.0, 1.0]], dtype=np.float)
+    img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
+    # cv2.imshow("Rigid", img_2)
+
+    matrix = findRigidCorr(img_1, img_2)
+    img_3 = cv2.warpPerspective(img_1, matrix, img_1.shape[::-1])
+    cv2.imshow("Rigid from cv2", img_2)
+    cv2.imshow("RigidCorr from me", img_3)
+    print(matrix)
+    cv2.waitKey(0)
+
+    cv2.imwrite('imRigidB2.jpg', cv2.cvtColor((img_2).astype(np.uint8), cv2.COLOR_RGB2BGR))
 
 
 # ---------------------------------------------------------------------------
-# ------------------------ Image Alignment & Warping ------------------------
+# ------------------------ Image Warping ------------------------
 # ---------------------------------------------------------------------------
 
 
@@ -264,18 +311,28 @@ def blendDemo():
 
 def main():
     print("ID:", myID())
-
+    # Lk
     img_path = 'input/boxMan.jpg'
-    # lkDemo(img_path)
-    # hierarchicalkDemo(img_path)
-    # compareLK(img_path)
-    # compareTranslation(img_path)
-    compareRigid(img_path)
+    lkDemo(img_path)
+    hierarchicalkDemo(img_path)
+    compareLK(img_path)
+    # Translation
+    img_path = 'input/NewYork.jpg'
+    TranslationLK(img_path)
+    img_path = 'input/Beer.jpg'
+    TranslationCorrelation(img_path)
+    # Rigid
+    img_path = 'input/Guatamala.jpg'
+    RigidLK(img_path)
+    img_path = 'input/sunset.jpg'
+    RigidCorrelation(img_path)
+    # Warping
+    img_path = 'input/boxMan.jpg'
     # imageWarpingDemo(img_path)
-    #
-    # pyrGaussianDemo('input/pyr_bit.jpg')
-    # pyrLaplacianDemo('input/pyr_bit.jpg')
-    # blendDemo()
+    # Pyramids
+    pyrGaussianDemo('input/pyr_bit.jpg')
+    pyrLaplacianDemo('input/pyr_bit.jpg')
+    blendDemo()
 
 
 if __name__ == '__main__':
