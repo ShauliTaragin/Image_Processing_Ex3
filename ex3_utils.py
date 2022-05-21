@@ -151,19 +151,35 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Translation.
     :return: Translation matrix by LK.
     """
-    xy, uv = opticalFlow(im1, im2, 20, 5)
+    xy, uv = opticalFlowPyrLK(im1, im2,stepSize=20, winSize=5, k=5)
+    # basically we will iterate over all the u,v's we got and check which one gives the best result i.e the MSE
     u = uv[:, [0]]
     u = list(u.T[0])
     u = np.array(u)
-    u_average = np.median(u)
+    # u_average = np.median(u)
     v = uv[:, [1]]
     v = list(v.T[0])
     v = np.array(v)
-    v_average = np.average(v)
-    translation_mat = np.float32([[1, 0, u_average*50],
-                                  [0, 1, v_average*3],
-                                  [0, 0, 1]])
-    #need to fix this
+    min_difference = sys.maxsize
+    translation_mat = np.array([[0, 0, 0],
+                      [0, 0, 0],
+                      [0, 0, 0]], dtype=np.float)
+    for i in range(len(u)):
+        t_ui=u[i]
+        t_vi=v[i]
+        # create the mat with current uv
+        translation_mat_i = np.array([[1, 0, t_ui],
+                      [0, 1, t_vi],
+                      [0, 0, 1]], dtype=np.float)
+        # create the image with current uv
+        img_i = cv2.warpPerspective(im1, translation_mat_i, im1.shape[::-1])
+        # find the mse
+        mse = np.square(im2 - img_i).mean()
+        # check whether current mse is least and update accordingly
+        if mse<min_difference:
+            min_difference = mse
+            translation_mat = translation_mat_i
+
     return translation_mat
 
 
