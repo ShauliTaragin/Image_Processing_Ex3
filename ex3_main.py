@@ -1,6 +1,7 @@
 import math
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from ex3_utils import *
 import time
@@ -33,6 +34,16 @@ def lkDemo(img_path):
 
     displayOpticalFlow(img_2, pts, uv)
 
+def arr3d2pts(mat:np.ndarray) ->(np.ndarray, np.ndarray):
+    x_y_return = []
+    u_x_return = []
+    for x in range(len(mat)):
+        for y in range(len(mat[0])):
+            dummy = mat[x, y]
+            if mat[x, y][0] != 0 or mat[x, y][1] != 0:
+                x_y_return.append([y, x])
+                u_x_return.append(mat[x, y])
+    return np.array(x_y_return), np.array(u_x_return)
 
 def hierarchicalkDemo(img_path):
     """
@@ -49,7 +60,8 @@ def hierarchicalkDemo(img_path):
                   [0, 0, 1]], dtype=np.float)
     img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
     st = time.time()
-    pts, uv = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
+    arr3d = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
+    pts, uv = arr3d2pts(arr3d)
     et = time.time()
 
     print("Time: {:.4f}".format(et - st))
@@ -73,9 +85,9 @@ def compareLK(img_path):
                   [0, 1, -.1],
                   [0, 0, 1]], dtype=np.float)
     img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
-    pts1, uv1 = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
-    pts2, uv2 = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
-
+    pts1, uv1 = opticalFlow(img_1.astype(np.float), img_2.astype(np.float), step_size=20, win_size=5)
+    arr3d = opticalFlowPyrLK(img_1.astype(np.float), img_2.astype(np.float), stepSize=20, winSize=5, k=5)
+    pts2, uv2=arr3d2pts(arr3d)
     displayOpticalFlow2(img_2, pts1, uv1 ,img_2, pts2, uv2)
 
 
@@ -192,8 +204,8 @@ def RigidCorrelation(img_path):
     img_1 = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
     img_1 = cv2.resize(img_1, (0, 0), fx=.5, fy=0.5)
     cv2.imwrite('imRigidB1.jpg', cv2.cvtColor((img_1).astype(np.uint8), cv2.COLOR_RGB2BGR))
-    t = np.array([[np.cos(np.radians(20)), -np.sin(np.radians(20)), 5],
-                  [np.sin(np.radians(20)), np.cos(np.radians(20)), 6],
+    t = np.array([[np.cos(np.radians(0.6)), -np.sin(np.radians(0.6)), 5],
+                  [np.sin(np.radians(0.6)), np.cos(np.radians(0.6)), 6],
                   [0.0, 0.0, 1.0]], dtype=np.float)
     img_2 = cv2.warpPerspective(img_1, t, img_1.shape[::-1])
     # cv2.imshow("Rigid", img_2)

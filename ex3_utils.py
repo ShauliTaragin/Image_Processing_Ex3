@@ -1,3 +1,4 @@
+import math
 import sys
 from typing import List
 
@@ -137,7 +138,15 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int,
             else:
                 x_y_prev.append(x_y_i[j])
                 u_v_prev.append(uv_i[j])
-    return np.array(x_y_prev), np.array(u_v_prev)
+    # now we shall change uv and xy to a 3 dimensional array
+    arr3d = np.zeros(shape=(img1.shape[0], img1.shape[1], 2))
+    for x in range(img1.shape[0]):
+        for y in range(img1.shape[1]):
+            if [y, x] not in x_y_prev:
+                arr3d[x, y] = [0, 0]
+            else:
+                arr3d[x, y] = u_v_prev[x_y_prev.index([y, x])]
+    return arr3d
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +160,7 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Translation.
     :return: Translation matrix by LK.
     """
-    xy, uv = opticalFlowPyrLK(im1, im2,stepSize=20, winSize=5, k=5)
+    xy, uv = opticalFlow(im1, im2, step_size=20, win_size=5)
     # basically we will iterate over all the u,v's we got and check which one gives the best result i.e the MSE
     u = uv[:, [0]]
     u = list(u.T[0])
@@ -162,21 +171,21 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     v = np.array(v)
     min_difference = sys.maxsize
     translation_mat = np.array([[0, 0, 0],
-                      [0, 0, 0],
-                      [0, 0, 0]], dtype=np.float)
+                                [0, 0, 0],
+                                [0, 0, 0]], dtype=np.float)
     for i in range(len(u)):
-        t_ui=u[i]
-        t_vi=v[i]
+        t_ui = u[i]
+        t_vi = v[i]
         # create the mat with current uv
         translation_mat_i = np.array([[1, 0, t_ui],
-                      [0, 1, t_vi],
-                      [0, 0, 1]], dtype=np.float)
+                                      [0, 1, t_vi],
+                                      [0, 0, 1]], dtype=np.float)
         # create the image with current uv
         img_i = cv2.warpPerspective(im1, translation_mat_i, im1.shape[::-1])
         # find the mse
         mse = np.square(im2 - img_i).mean()
         # check whether current mse is least and update accordingly
-        if mse<min_difference:
+        if mse < min_difference:
             min_difference = mse
             translation_mat = translation_mat_i
 
@@ -195,10 +204,9 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     xy_after_change = xy_after_change.astype(float)
     for i in range(len(xy)):
         xy_after_change[i] += uv[i]
-        angle_list.append(find_ang(xy[i], xy_after_change[i]))
+        angle_list.append(find_ang(xy[i], (0, 0), xy_after_change[i]))
     angle_list = np.array(angle_list)
-    theta = np.mean(angle_list)
-    theta = 0.5
+    theta = np.median(angle_list)
     mat_to_extract_xy_from = findTranslationCorr(im1, im2)
     t_x = mat_to_extract_xy_from[0][2]
     t_y = mat_to_extract_xy_from[1][2]
@@ -244,7 +252,7 @@ def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :return: Rigid matrix by correlation.
     """
     x_1, y_1, x_2, y_2 = findXsYsCorr(im1, im2)
-    theta = find_ang((x_2, y_2), (x_1, y_1))
+    theta = find_ang((x_2, y_2), (0, 0), (x_1, y_1))
     mat = np.float32([
         [np.cos(np.radians(theta)), -np.sin(np.radians(theta)), 0],
         [np.sin(np.radians(theta)), np.cos(np.radians(theta)), 0],
@@ -257,15 +265,22 @@ def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     t_y = y2 - y - 1
     return np.float32([
         [np.cos(np.radians(theta)), -np.sin(np.radians(theta)), t_x],
-        [np.sin(np.radians(theta)), np.cos(np.radians(theta)), t_y],
+        [np.sin(np.radians(theta)), np.cos(np.radians(theta)), t_y / 6],
         [0, 0, 1]
     ])
 
 
-def find_ang(p1, p2):
-    ang1 = np.arctan2(*p1[::-1])
-    ang2 = np.arctan2(*p2[::-1])
-    return np.rad2deg((ang1 - ang2) % (2 * np.pi))
+def find_ang(first, second: (0, 0), third, /):
+    first_angles_y, first_angles_x = first[0] - second[0], first[1] - second[1]
+    seconed_angles_y, seconed_angles_x = third[0] - second[0], third[1] - second[1]
+    arctan1 = math.atan2(first_angles_x, first_angles_y)
+    arctan2 = math.atan2(seconed_angles_x, seconed_angles_y)
+    if arctan1 < 0: arctan1 += math.pi
+    if arctan2 < 0: arctan2 += math.pi
+    if arctan1 <= arctan2:
+        return arctan2 - arctan1
+    else:
+        return math.pi / 3 + arctan2 - arctan1
 
 
 def warpImages(im1: np.ndarray, im2: np.ndarray, T: np.ndarray) -> np.ndarray:
